@@ -15,7 +15,7 @@ label{display:block;font-weight:750;margin:0 0 9px}textarea{width:100%;min-heigh
 textarea:focus{border-color:var(--pink);box-shadow:0 0 0 3px #ff4fa322}.hint{font-size:12px;color:var(--muted);margin:8px 0 15px}
 .toolbar{display:flex;flex-wrap:wrap;gap:9px}.btn{border:0;border-radius:11px;padding:10px 15px;font-weight:750;cursor:pointer;background:#2b2b38;color:#fff;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}.btn:hover{filter:brightness(1.12)}.primary{background:linear-gradient(100deg,#ff4fa3,#d93685)}.outline{background:transparent;border:1px solid #454554}.btn:disabled{opacity:.4;cursor:not-allowed}
 .stats{display:flex;gap:9px;flex-wrap:wrap;margin:17px 0}.stat{background:#101018;border:1px solid var(--line);padding:8px 12px;border-radius:12px;color:var(--muted);font-size:13px}.stat b{color:#fff;margin-right:4px}
-.progress{height:8px;background:#292936;border-radius:99px;overflow:hidden;margin:12px 0}.bar{height:100%;width:0;background:linear-gradient(90deg,#ff4fa3,#9b68ff);transition:width .2s}
+.progressHead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;font-size:13px;color:var(--muted)}.progressHead strong{color:#fff;font-size:18px;font-variant-numeric:tabular-nums}.progress{height:10px;background:#292936;border-radius:99px;overflow:hidden;margin:7px 0 12px}.bar{height:100%;width:0;background:linear-gradient(90deg,#ff4fa3,#9b68ff);transition:width .2s}
 .list{display:grid;gap:9px;margin-top:14px}.item{display:flex;align-items:center;gap:11px;background:#101018;border:1px solid var(--line);border-radius:13px;padding:11px;min-width:0}.num{width:29px;height:29px;flex:0 0 29px;border-radius:9px;background:#28202d;color:#ff8bc1;display:grid;place-items:center;font-weight:800;font-size:12px}
 .details{min-width:0;flex:1}.url{overflow-wrap:anywhere;font-size:12px;color:#e4e4ed}.status{font-size:11px;color:var(--muted);margin-top:4px}.kind{display:inline-block;font-size:10px;border:1px solid #4a4054;color:#e7b4d1;border-radius:99px;padding:1px 7px;margin-bottom:4px}
 .actions{display:flex;gap:6px;flex-shrink:0}.small{padding:7px 10px;font-size:12px}.empty{color:var(--muted);text-align:center;padding:22px;border:1px dashed #3a3a48;border-radius:13px}
@@ -33,17 +33,27 @@ footer{text-align:center;color:#777786;font-size:12px;margin-top:17px}
 <p class="hint">Bisa dengan atau tanpa awalan https://. Link file MP4 langsung dapat dicoba diunduh; link postingan sosial akan dibuka di situs/aplikasi asalnya.</p>
 <div class="toolbar"><button class="btn primary" id="load">Muat daftar</button><button class="btn outline" id="clearInput">Kosongkan input</button><button class="btn outline" id="copyLinks">Salin semua link</button></div>
 <div class="stats"><div class="stat"><b id="count">0</b> link</div><div class="stat"><b id="direct">0</b> file MP4 langsung</div><div class="stat"><b id="social">0</b> link halaman</div><div class="stat"><b id="done">0</b> selesai</div><div class="stat"><b id="failed">0</b> gagal otomatis</div></div>
-<div class="toolbar"><button class="btn primary" id="downloadAll" disabled>Coba download semua MP4</button><button class="btn outline" id="stop" disabled>Hentikan antrean</button><button class="btn outline" id="clearList" disabled>Hapus daftar</button></div>
-<div class="progress"><div class="bar" id="bar"></div></div>
+<div class="toolbar"><button class="btn primary" id="downloadAll" disabled>Coba download semua MP4</button><button class="btn outline" id="stop" disabled>Hentikan antrean</button><button class="btn outline" id="clearList" disabled>Hapus daftar</button><button class="btn outline" id="resetDone">Reset riwayat selesai</button></div>
+<div class="progressHead"><span>Progres download keseluruhan</span><strong id="percent">0%</strong></div><div class="progress"><div class="bar" id="bar"></div></div>
 <div id="list" class="list"><div class="empty">Tempel link di atas, lalu tekan “Muat daftar”.</div></div>
-<div class="note"><strong>Penting:</strong> Link MP4 langsung dari domain mana pun bisa dicoba, tetapi keberhasilan download otomatis bergantung pada izin CORS dan pengaturan server. Link Instagram, X, TikTok, Facebook, dan halaman sosial lainnya bukan file MP4 langsung; halaman itu hanya bisa dibuka dari tombol “Buka”. Halaman ini tidak mengambil video dengan melewati login, proteksi, atau pembatasan platform.</div>
+<div class="note"><strong>Penting:</strong> Link MP4 langsung dari domain mana pun bisa dicoba, tetapi keberhasilan download otomatis bergantung pada izin CORS dan pengaturan server. Riwayat link yang sudah berhasil dikirim ke browser disimpan di perangkat ini agar tidak terunduh berulang; gunakan “Reset riwayat selesai” jika memang ingin mengunduh ulang. Link Instagram, X, TikTok, Facebook, dan halaman sosial lainnya bukan file MP4 langsung; halaman itu hanya bisa dibuka dari tombol “Buka”. Halaman ini tidak mengambil video dengan melewati login, proteksi, atau pembatasan platform.</div>
 </section>
 <footer>Gunakan untuk video milik sendiri atau yang kamu punya izin untuk mengunduh.</footer>
 </main>
 <script>
 (() => {
  const $ = id => document.getElementById(id);
- let items = [], stopped = false, completed = 0, failed = 0;
+ let items = [], stopped = false, completed = 0, failed = 0, running = false;
+ const STORAGE_KEY = "uvlm_v4_completed_urls";
+ const doneUrls = new Set();
+ try {
+   const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+   if (Array.isArray(saved)) saved.forEach(x => doneUrls.add(x));
+ } catch {}
+ const inProgress = new Set();
+ function saveDone() {
+   try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...doneUrls])); } catch {}
+ }
  function normalize(raw) {
    let value = raw.trim().replace(/^<|>$/g,"");
    if (!value) return null;
@@ -68,10 +78,16 @@ footer{text-align:center;color:#777786;font-size:12px;margin-top:17px}
    $("count").textContent = items.length;
    $("direct").textContent = items.filter(x=>x.direct).length;
    $("social").textContent = items.filter(x=>!x.direct).length;
+   const directItems = items.filter(x => x.direct);
+   const total = directItems.length;
+   completed = directItems.filter(x => doneUrls.has(x.url)).length;
    $("done").textContent = completed; $("failed").textContent = failed;
-   $("bar").style.width = (items.length ? (completed+failed)/items.length*100 : 0)+"%";
-   $("downloadAll").disabled = !items.some(x=>x.direct);
+   const percent = total ? Math.round(completed / total * 100) : 0;
+   $("percent").textContent = percent + "%";
+   $("bar").style.width = percent + "%";
+   $("downloadAll").disabled = running || !directItems.some(x => !doneUrls.has(x.url));
    $("clearList").disabled = !items.length;
+   $("stop").disabled = !running;
  }
  function status(i,msg){const el=$("status-"+i);if(el)el.textContent=msg}
  function render(){
@@ -83,18 +99,20 @@ footer{text-align:center;color:#777786;font-size:12px;margin-top:17px}
      const details=document.createElement("div");details.className="details";
      const kind=document.createElement("div");kind.className="kind";kind.textContent=item.direct?"FILE MP4 LANGSUNG":"LINK HALAMAN / SOSIAL";
      const url=document.createElement("div");url.className="url";url.textContent=item.url;
-     const st=document.createElement("div");st.className="status";st.id="status-"+i;st.textContent=item.direct?"Siap dicoba unduh":"Buka halaman sumber untuk melihat video";
+     const st=document.createElement("div");st.className="status";st.id="status-"+i;
+     st.textContent=item.direct?(doneUrls.has(item.url)?"✓ Sudah diminta diunduh — dilewati agar tidak dobel":"Siap dicoba unduh"):"Buka halaman sumber untuk melihat video";
      details.append(kind,url,st);
      const actions=document.createElement("div");actions.className="actions";
-     if(item.direct){const dl=document.createElement("button");dl.className="btn small";dl.textContent="Download";dl.onclick=()=>downloadOne(i);actions.append(dl)}
+     if(item.direct){const dl=document.createElement("button");dl.className="btn small";dl.textContent=doneUrls.has(item.url)?"Sudah selesai":"Download";dl.disabled=doneUrls.has(item.url)||inProgress.has(item.url);dl.onclick=()=>downloadOne(i);actions.append(dl)}
      const open=document.createElement("a");open.className="btn small outline";open.textContent="Buka";open.href=item.url;open.target="_blank";open.rel="noopener noreferrer";actions.append(open);
      row.append(n,details,actions);list.append(row);
    });
  }
  function nameFrom(url,i){const p=new URL(url).pathname.split("/").pop();return p&&p.includes(".")?p:`video-${i+1}.mp4`}
  async function downloadOne(i){
-   const item=items[i];if(!item||!item.direct)return false;
-   status(i,"Menghubungkan ke server…");
+   const item=items[i];
+   if(!item||!item.direct||doneUrls.has(item.url)||inProgress.has(item.url)) return false;
+   inProgress.add(item.url); status(i,"Mengunduh data…"); render(); stats();
    try{
      const response=await fetch(item.url,{mode:"cors"});
      if(!response.ok)throw new Error("HTTP "+response.status);
@@ -102,9 +120,17 @@ footer{text-align:center;color:#777786;font-size:12px;margin-top:17px}
      const objectUrl=URL.createObjectURL(blob),a=document.createElement("a");
      a.href=objectUrl;a.download=nameFrom(item.url,i);document.body.appendChild(a);a.click();a.remove();
      setTimeout(()=>URL.revokeObjectURL(objectUrl),60000);
-     status(i,"Permintaan download berhasil dikirim");completed++;stats();return true;
-   }catch(e){status(i,"Download otomatis ditolak server/browser — coba Buka");failed++;stats();return false}
+     doneUrls.add(item.url);saveDone();
+     status(i,"✓ Selesai — file sudah dikirim ke browser");
+     return true;
+   }catch(e){
+     status(i,"Gagal otomatis — coba tombol Buka");
+     failed++;return false;
+   }finally{
+     inProgress.delete(item.url);render();stats();
+   }
  }
+
  $("load").onclick=()=>{
    const rawCount=$("urls").value.split(/\s+/).filter(Boolean).length;
    items=parse();completed=0;failed=0;stopped=false;render();stats();
@@ -112,6 +138,10 @@ footer{text-align:center;color:#777786;font-size:12px;margin-top:17px}
  };
  $("clearInput").onclick=()=>$("urls").value="";
  $("clearList").onclick=()=>{items=[];completed=0;failed=0;render();stats()};
+ $("resetDone").onclick=()=>{
+   if(!confirm("Hapus riwayat download selesai? Link yang sama bisa diunduh lagi setelah reset.")) return;
+   doneUrls.clear();saveDone();completed=0;failed=0;render();stats();
+ };
  $("copyLinks").onclick=async()=>{
    const values=items.map(x=>x.url);
    if(!values.length)return alert("Belum ada link untuk disalin.");
@@ -119,12 +149,74 @@ footer{text-align:center;color:#777786;font-size:12px;margin-top:17px}
  };
  $("stop").onclick=()=>{stopped=true;$("stop").disabled=true};
  $("downloadAll").onclick=async()=>{
-   stopped=false;completed=0;failed=0;stats();$("stop").disabled=false;$("downloadAll").disabled=true;
-   for(let i=0;i<items.length;i++){if(stopped)break;if(items[i].direct){await downloadOne(i);await new Promise(r=>setTimeout(r,900))}}
-   $("stop").disabled=true;stats();
+   if(running) return;
+   stopped=false;running=true;failed=0;stats();
+   for(let i=0;i<items.length;i++){
+     if(stopped)break;
+     if(items[i].direct && !doneUrls.has(items[i].url)){
+       await downloadOne(i);
+       if(!stopped) await new Promise(r=>setTimeout(r,900));
+     }
+   }
+   running=false;stats();
  };
  render();stats();
 })();
 </script>
 </body>
 </html>
+   const item=items[i];
+   if(!item||!item.direct||doneUrls.has(item.url)||inProgress.has(item.url)) return false;
+   inProgress.add(item.url); status(i,"Mengunduh data…"); render(); stats();
+   try{
+     const response=await fetch(item.url,{mode:"cors"});
+     if(!response.ok)throw new Error("HTTP "+response.status);
+     const blob=await response.blob();if(!blob.size)throw new Error("File kosong");
+     const objectUrl=URL.createObjectURL(blob),a=document.createElement("a");
+     a.href=objectUrl;a.download=nameFrom(item.url,i);document.body.appendChild(a);a.click();a.remove();
+     setTimeout(()=>URL.revokeObjectURL(objectUrl),60000);
+     doneUrls.add(item.url);saveDone();
+     status(i,"✓ Selesai — file sudah dikirim ke browser");
+     return true;
+   }catch(e){
+     status(i,"Gagal otomatis — coba tombol Buka");
+     failed++;return false;
+   }finally{
+     inProgress.delete(item.url);render();stats();
+   }
+ }
+
+ $("load").onclick=()=>{
+   const rawCount=$("urls").value.split(/\s+/).filter(Boolean).length;
+   items=parse();completed=0;failed=0;stopped=false;render();stats();
+   if(rawCount>items.length)alert((rawCount-items.length)+" baris kosong/URL tidak valid dilewati.");
+ };
+ $("clearInput").onclick=()=>$("urls").value="";
+ $("clearList").onclick=()=>{items=[];completed=0;failed=0;render();stats()};
+ $("resetDone").onclick=()=>{
+   if(!confirm("Hapus riwayat download selesai? Link yang sama bisa diunduh lagi setelah reset.")) return;
+   doneUrls.clear();saveDone();completed=0;failed=0;render();stats();
+ };
+ $("copyLinks").onclick=async()=>{
+   const values=items.map(x=>x.url);
+   if(!values.length)return alert("Belum ada link untuk disalin.");
+   try{await navigator.clipboard.writeText(values.join("\n"));alert("Semua link berhasil disalin.")}catch{alert("Clipboard tidak tersedia di browser ini.")}
+ };
+ $("stop").onclick=()=>{stopped=true;$("stop").disabled=true};
+ $("downloadAll").onclick=async()=>{
+   if(running) return;
+   stopped=false;running=true;failed=0;stats();
+   for(let i=0;i<items.length;i++){
+     if(stopped)break;
+     if(items[i].direct && !doneUrls.has(items[i].url)){
+       await downloadOne(i);
+       if(!stopped) await new Promise(r=>setTimeout(r,900));
+     }
+   }
+   running=false;stats();
+ };
+ render();stats();
+})();
+</script>
+</body>
+                      </html>
